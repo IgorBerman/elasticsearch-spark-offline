@@ -1,4 +1,4 @@
-# Elasticsearch offline snapshot preparation 
+# Elasticsearch offline snapshot preparation with spark
 
 # NOT PRODUCTION READY
 

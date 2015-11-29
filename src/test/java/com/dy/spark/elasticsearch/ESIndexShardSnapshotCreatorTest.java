@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import lombok.RequiredArgsConstructor;
 
@@ -61,18 +62,21 @@ public class ESIndexShardSnapshotCreatorTest {
 		String indexName = "my-index_" +System.currentTimeMillis();
 		String indexType = "mydata";//should be consistent with template.json
 		
+		long start = System.currentTimeMillis();
 		int partitionsNum = 4;
+		int bulkSize = 10000;
 		//this will be done concurrently by workers
 		for (int part = 0; part < partitionsNum; part++) {
 			List<Tuple2<String, MyData>> docs = new ArrayList<>();
-			for (int doc = 1; doc < 1000000; doc++) {
+			for (int doc = 0; doc < 1000000; doc++) {
 				String id = doc+"-" +part;
 				docs.add(new Tuple2<>(id, new MyData(doc, id)));
 			}
-			creator.<MyData>create(indexName, part, "", indexType, docs.iterator(), TIMEOUT);
+			creator.<MyData>create(indexName, part, bulkSize, "", indexType, docs.iterator(), TIMEOUT);
 		}
 		//this stage will be done by driver(?) or one of the workers
 		creator.postprocess(indexName, partitionsNum, "", indexType, TIMEOUT);
+		System.out.println("Everything took: " + TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - start) + " secs");
 	}
 
 }

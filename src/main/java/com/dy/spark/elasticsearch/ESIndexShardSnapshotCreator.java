@@ -22,7 +22,6 @@ import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
-import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.base.Joiner;
 import org.elasticsearch.common.settings.ImmutableSettings;
@@ -41,7 +40,6 @@ import com.google.gson.Gson;
 public class ESIndexShardSnapshotCreator {
 	private static final int WAIT_FOR_COMPLETION_DELAY = 1000;
 	public static final String SNAPSHOT_NAME_PREFIX = "snapshot";
-	private static final int BULK_SIZE = 5000;
 	private final BaseTransport transport;
 	private final String snapshotWorkingLocationBase;
 	private final String snapshotFinalDestination;
@@ -51,11 +49,19 @@ public class ESIndexShardSnapshotCreator {
 	private final String templateJson;
 	private final int maxMergedSegment;
 
-	public <T> void create(String indexName, int partition, String routing, String indexType, Iterator<Tuple2<String, T>> docs, long timeout) throws IOException {
-		createSnapshotAndMoveToDest(indexName, partition, 1, routing, indexType, docs, timeout, true);
+	public <T> void create(String indexName, int partition, int bulkSize, String routing, String indexType, Iterator<Tuple2<String, T>> docs, long timeout) throws IOException {
+		createSnapshotAndMoveToDest(indexName, partition, 1, bulkSize, routing, indexType, docs, timeout, true);
 	}
 	
-	private <T> void createSnapshotAndMoveToDest(String indexName, int partition, int numShardsPerIndex, String routing, String indexType, Iterator<Tuple2<String, T>> docs, long timeout, boolean moveShards) throws IOException {
+	private <T> void createSnapshotAndMoveToDest(String indexName, 
+			int partition, 
+			int numShardsPerIndex,
+			int bulkSize,
+			String routing, 
+			String indexType, 
+			Iterator<Tuple2<String, T>> docs, 
+			long timeout, 
+			boolean moveShards) throws IOException {
 		log.info("Creating snapshot of shard for index " + indexName + "[" + partition +"]");
 		String snapshotWorkingLocation = Joiner.on("/").join(snapshotWorkingLocationBase, snapshotRepoName, indexName, partition);
 		log.debug("snapshotWorkingLocation " + snapshotWorkingLocation);
@@ -152,7 +158,7 @@ public class ESIndexShardSnapshotCreator {
 				bulkRequest.add(indexRequestBuilder);
 				countInBulk ++;
 				
-				if (countInBulk == BULK_SIZE) {
+				if (countInBulk == bulkSize) {
 					log.debug("bulking...");
 					submitBulk(bulkRequest);
 					countInBulk = 0;
@@ -227,6 +233,6 @@ public class ESIndexShardSnapshotCreator {
 	 */
 	public void postprocess(String indexName, int numShardsPerIndex, String routing, String indexType, int timeout) throws IOException {
 		Iterator<Tuple2<String, Object>> docs = new ArrayList<Tuple2<String, Object>>().iterator();
-		createSnapshotAndMoveToDest(indexName, numShardsPerIndex, numShardsPerIndex, routing, indexType, docs, timeout, false);
+		createSnapshotAndMoveToDest(indexName, numShardsPerIndex, numShardsPerIndex, 0, routing, indexType, docs, timeout, false);
 	}
 }

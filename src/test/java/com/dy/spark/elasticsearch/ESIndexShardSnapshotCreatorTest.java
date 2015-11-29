@@ -65,7 +65,7 @@ public class ESIndexShardSnapshotCreatorTest {
 		//this will be done concurrently by workers
 		for (int part = 0; part < partitionsNum; part++) {
 			List<Tuple2<String, MyData>> docs = new ArrayList<>();
-			for (int doc = 1; doc < 4; doc++) {
+			for (int doc = 1; doc < 1000000; doc++) {
 				String id = doc+"-" +part;
 				docs.add(new Tuple2<>(id, new MyData(doc, id)));
 			}

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j;
@@ -17,6 +18,10 @@ import org.apache.commons.io.FileUtils;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
+import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.base.Joiner;
@@ -36,6 +41,7 @@ import com.google.gson.Gson;
 public class ESIndexShardSnapshotCreator {
 	private static final int WAIT_FOR_COMPLETION_DELAY = 1000;
 	public static final String SNAPSHOT_NAME_PREFIX = "snapshot";
+	private static final int BULK_SIZE = 5000;
 	private final BaseTransport transport;
 	private final String snapshotWorkingLocationBase;
 	private final String snapshotFinalDestination;
@@ -130,14 +136,31 @@ public class ESIndexShardSnapshotCreator {
 							.put("index.number_of_shards", numShardsPerIndex)).get();
 
 			log.info("Starting indexing documents "+ indexName + "[" + partition +"]");
+			BulkRequestBuilder bulkRequest = node.client().prepareBulk();
 			Gson gson = new Gson();
+			
+			int countInBulk = 0;
 			while (docs.hasNext()) {
 				Tuple2<String, T> doc = docs.next();
 
-				IndexResponse response = node.client().prepareIndex(indexName, indexType).setId(doc._1())
-				// .setRouting(routing)
-						.setSource(gson.toJson(doc._2())).execute().actionGet();
-				response.isCreated();
+				IndexRequestBuilder indexRequestBuilder = node
+						.client()
+						.prepareIndex(indexName, indexType)
+						.setId(doc._1())
+				// 		.setRouting(routing)
+						.setSource(gson.toJson(doc._2()));
+				bulkRequest.add(indexRequestBuilder);
+				countInBulk ++;
+				
+				if (countInBulk == BULK_SIZE) {
+					log.debug("bulking...");
+					submitBulk(bulkRequest);
+					countInBulk = 0;
+					bulkRequest = node.client().prepareBulk();
+				}
+			}
+			if (countInBulk != 0) {
+				submitBulk(bulkRequest);
 			}
 
 			TimeValue v = new TimeValue(timeout);
@@ -176,6 +199,19 @@ public class ESIndexShardSnapshotCreator {
 			log.info("Cleanup " + esWorkingDir);
 			FileUtils.deleteQuietly(new File(esWorkingDir));
 		}
+	}
+
+	private void submitBulk(BulkRequestBuilder bulkRequest) {
+		long start = System.currentTimeMillis();
+		BulkResponse bulkResponse = bulkRequest.execute().actionGet();
+		if (bulkResponse.hasFailures()) {
+			for (BulkItemResponse resp : bulkResponse.getItems()) {
+				if (resp.getFailure() != null) {
+					log.error(resp.getFailureMessage());
+				}
+			}
+		}
+		log.info("bulk took " + TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - start) + " secs");
 	}
 
 	private void waitForCompletion() {

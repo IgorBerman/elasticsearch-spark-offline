@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import lombok.RequiredArgsConstructor;
@@ -43,7 +45,7 @@ public class ESIndexShardSnapshotCreatorTest {
 	 * 4. you should see 12 docs...
 	*/
 	@Test
-	public void test() throws IOException, URISyntaxException {
+	public void test() throws IOException, URISyntaxException, InterruptedException {
 		String snapshotBase = "/tmp/es-test/snapshots-work/";
 		String snapshotFinalDestination="/tmp/es-test/my_backup_repo/";
 		BaseTransport transport = new LocalFSSnapshotTransport();
@@ -51,7 +53,7 @@ public class ESIndexShardSnapshotCreatorTest {
 		File templateFile = new File(ESIndexShardSnapshotCreatorTest.class.getResource("template.json").toURI().toURL().getFile());
 		String templateJson = FileUtils.readFileToString(templateFile);
 		
-		ESIndexShardSnapshotCreator creator = new ESIndexShardSnapshotCreator(transport, 
+		final ESIndexShardSnapshotCreator creator = new ESIndexShardSnapshotCreator(transport, 
 				snapshotBase, 
 				snapshotFinalDestination,
 				"my_backup_repo", 
@@ -59,20 +61,36 @@ public class ESIndexShardSnapshotCreatorTest {
 				"es-template", 
 				templateJson,
 				100);
-		String indexName = "my-index_" +System.currentTimeMillis();
-		String indexType = "mydata";//should be consistent with template.json
+		final String indexName = "my-index_" +System.currentTimeMillis();
+		final String indexType = "mydata";//should be consistent with template.json
 		
 		long start = System.currentTimeMillis();
-		int partitionsNum = 4;
-		int bulkSize = 10000;
+		final int partitionsNum = 4;
+		final int bulkSize = 10000;
+		final int totalNumberOfDocs = 1_000_000;//1_078_671_786;
+		ExecutorService pool = Executors.newFixedThreadPool(partitionsNum);
 		//this will be done concurrently by workers
 		for (int part = 0; part < partitionsNum; part++) {
-			List<Tuple2<String, MyData>> docs = new ArrayList<>();
-			for (int doc = 0; doc < 1000000; doc++) {
-				String id = doc+"-" +part;
-				docs.add(new Tuple2<>(id, new MyData(doc, id)));
-			}
-			creator.<MyData>create(indexName, part, bulkSize, "", indexType, docs.iterator(), TIMEOUT);
+			final int partNum = part;
+			pool.submit(new Runnable() {
+				@Override
+				public void run() {
+					List<Tuple2<String, MyData>> docs = new ArrayList<>();
+					for (int doc = 0; doc <  totalNumberOfDocs/partitionsNum; doc++) {
+						String id = doc+"-" +partNum;
+						docs.add(new Tuple2<>(id, new MyData(doc, id)));
+					}
+					try {
+						creator.<MyData>create(indexName, partNum, bulkSize, "", indexType, docs.iterator(), TIMEOUT);
+					} catch (IOException e) {
+						throw new RuntimeException(e);
+					}
+				}
+			});
+		}
+		while(!pool.isTerminated()) {
+			System.out.println("Awaiting termination...");
+			pool.awaitTermination(TIMEOUT, TimeUnit.SECONDS);
 		}
 		//this stage will be done by driver(?) or one of the workers
 		creator.postprocess(indexName, partitionsNum, "", indexType, TIMEOUT);

@@ -217,7 +217,7 @@ public class ESIndexShardSnapshotCreator {
 				}
 			}
 		}
-		log.info("bulk took " + TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - start) + " secs");
+		log.debug("bulk took " + TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - start) + " secs");
 	}
 
 	private void waitForCompletion() {

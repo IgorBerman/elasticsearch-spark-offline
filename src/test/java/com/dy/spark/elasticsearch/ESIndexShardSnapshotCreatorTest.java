@@ -20,7 +20,7 @@ import com.dy.spark.elasticsearch.transport.BaseTransport;
 import com.dy.spark.elasticsearch.transport.LocalFSSnapshotTransport;
 
 public class ESIndexShardSnapshotCreatorTest {
-	private static final int TIMEOUT = 1000000;
+	private static final int TIMEOUT = 10000;
 
 	@RequiredArgsConstructor
 	static final class MyData {
@@ -66,8 +66,8 @@ public class ESIndexShardSnapshotCreatorTest {
 		
 		long start = System.currentTimeMillis();
 		final int partitionsNum = 4;
-		final int bulkSize = 10000;
-		final int totalNumberOfDocs = 1_000_000;//1_078_671_786;
+		final int bulkSize = 100000;
+		final int totalNumberOfDocsPerPartition = 1_000_000;//1_078_671_786;
 		ExecutorService pool = Executors.newFixedThreadPool(partitionsNum);
 		//this will be done concurrently by workers
 		for (int part = 0; part < partitionsNum; part++) {
@@ -76,7 +76,7 @@ public class ESIndexShardSnapshotCreatorTest {
 				@Override
 				public void run() {
 					List<Tuple2<String, MyData>> docs = new ArrayList<>();
-					for (int doc = 0; doc <  totalNumberOfDocs/partitionsNum; doc++) {
+					for (int doc = 0; doc <  totalNumberOfDocsPerPartition; doc++) {
 						String id = doc+"-" +partNum;
 						docs.add(new Tuple2<>(id, new MyData(doc, id)));
 					}
@@ -88,9 +88,9 @@ public class ESIndexShardSnapshotCreatorTest {
 				}
 			});
 		}
-		while(!pool.isTerminated()) {
+		pool.shutdown();
+		while(!pool.awaitTermination(TIMEOUT, TimeUnit.MILLISECONDS)) {
 			System.out.println("Awaiting termination...");
-			pool.awaitTermination(TIMEOUT, TimeUnit.SECONDS);
 		}
 		//this stage will be done by driver(?) or one of the workers
 		creator.postprocess(indexName, partitionsNum, "", indexType, TIMEOUT);

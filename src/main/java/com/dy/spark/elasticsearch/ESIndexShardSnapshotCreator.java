@@ -145,6 +145,7 @@ public class ESIndexShardSnapshotCreator {
 			BulkRequestBuilder bulkRequest = node.client().prepareBulk();
 			Gson gson = new Gson();
 			
+			int total = 0;
 			int countInBulk = 0;
 			while (docs.hasNext()) {
 				Tuple2<String, T> doc = docs.next();
@@ -157,16 +158,19 @@ public class ESIndexShardSnapshotCreator {
 						.setSource(gson.toJson(doc._2()));
 				bulkRequest.add(indexRequestBuilder);
 				countInBulk ++;
+				total++;
 				
 				if (countInBulk == bulkSize) {
-					log.debug("bulking...");
-					submitBulk(bulkRequest);
+					submitBulk(bulkRequest, total);
 					countInBulk = 0;
 					bulkRequest = node.client().prepareBulk();
 				}
+				if (total % 100000 == 0) {
+					log.info("Cont indexing " + indexName + "[" + partition +"], processed " + total);
+				}
 			}
 			if (countInBulk != 0) {
-				submitBulk(bulkRequest);
+				submitBulk(bulkRequest, total);
 			}
 
 			TimeValue v = new TimeValue(timeout);
@@ -207,7 +211,8 @@ public class ESIndexShardSnapshotCreator {
 		}
 	}
 
-	private void submitBulk(BulkRequestBuilder bulkRequest) {
+	private void submitBulk(BulkRequestBuilder bulkRequest, int total) {
+		log.debug("bulking...");
 		long start = System.currentTimeMillis();
 		BulkResponse bulkResponse = bulkRequest.execute().actionGet();
 		if (bulkResponse.hasFailures()) {

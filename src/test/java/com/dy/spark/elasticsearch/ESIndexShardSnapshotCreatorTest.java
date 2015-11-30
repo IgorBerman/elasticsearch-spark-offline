@@ -22,6 +22,41 @@ import com.dy.spark.elasticsearch.transport.LocalFSSnapshotTransport;
 public class ESIndexShardSnapshotCreatorTest {
 	private static final int TIMEOUT = 10000;
 
+	static class EsShardIndexingTask implements Runnable {
+		private final int bulkSize;
+		private final String indexType;
+		private final int partNum;
+		private final ESIndexShardSnapshotCreator creator;
+		private final int totalNumberOfDocsPerPartition;
+		private final String indexName;
+
+		private EsShardIndexingTask(int bulkSize, String indexType, int partNum,
+				ESIndexShardSnapshotCreator creator, int totalNumberOfDocsPerPartition, String indexName) {
+			this.bulkSize = bulkSize;
+			this.indexType = indexType;
+			this.partNum = partNum;
+			this.creator = creator;
+			this.totalNumberOfDocsPerPartition = totalNumberOfDocsPerPartition;
+			this.indexName = indexName;
+		}
+
+		@Override
+		public void run() {
+			List<Tuple2<String, MyData>> docs = new ArrayList<>();
+			System.out.println("Preparing");
+			for (int doc = 0; doc <  totalNumberOfDocsPerPartition; doc++) {
+				String id = doc+"-" +partNum;
+				docs.add(new Tuple2<>(id, new MyData(doc, id)));
+			}
+			try {
+				System.out.println("Creating");
+				creator.<MyData>create(indexName, partNum, bulkSize, "", indexType, docs.iterator(), TIMEOUT);
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+		}
+	}
+
 	@RequiredArgsConstructor
 	static final class MyData {
 		public final int a;
@@ -60,33 +95,20 @@ public class ESIndexShardSnapshotCreatorTest {
 				esWorkingBaseDir, 
 				"es-template", 
 				templateJson,
-				100);
+				1000,
+				512);
 		final String indexName = "my-index_" +System.currentTimeMillis();
 		final String indexType = "mydata";//should be consistent with template.json
 		
 		long start = System.currentTimeMillis();
 		final int partitionsNum = 4;
-		final int bulkSize = 100000;
-		final int totalNumberOfDocsPerPartition = 1_000_000;//1_078_671_786;
+		final int bulkSize = 10000;
+		final int totalNumberOfDocsPerPartition = 3_000_000;//1_078_671_786;
 		ExecutorService pool = Executors.newFixedThreadPool(partitionsNum);
 		//this will be done concurrently by workers
 		for (int part = 0; part < partitionsNum; part++) {
 			final int partNum = part;
-			pool.submit(new Runnable() {
-				@Override
-				public void run() {
-					List<Tuple2<String, MyData>> docs = new ArrayList<>();
-					for (int doc = 0; doc <  totalNumberOfDocsPerPartition; doc++) {
-						String id = doc+"-" +partNum;
-						docs.add(new Tuple2<>(id, new MyData(doc, id)));
-					}
-					try {
-						creator.<MyData>create(indexName, partNum, bulkSize, "", indexType, docs.iterator(), TIMEOUT);
-					} catch (IOException e) {
-						throw new RuntimeException(e);
-					}
-				}
-			});
+			pool.submit(new EsShardIndexingTask(bulkSize, indexType, partNum, creator, totalNumberOfDocsPerPartition, indexName));
 		}
 		pool.shutdown();
 		while(!pool.awaitTermination(TIMEOUT, TimeUnit.MILLISECONDS)) {

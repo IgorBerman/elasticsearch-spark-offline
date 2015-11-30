@@ -48,6 +48,7 @@ public class ESIndexShardSnapshotCreator {
 	private final String templateName;
 	private final String templateJson;
 	private final int maxMergedSegment;
+	private final int flushSizeInMb; 
 
 	public <T> void create(String indexName, int partition, int bulkSize, String routing, String indexType, Iterator<Tuple2<String, T>> docs, long timeout) throws IOException {
 		createSnapshotAndMoveToDest(indexName, partition, 1, bulkSize, routing, indexType, docs, timeout, true);
@@ -84,7 +85,7 @@ public class ESIndexShardSnapshotCreator {
 				.put("plugins." + PluginsService.LOAD_PLUGIN_FROM_CLASSPATH, true)
 				.put("index.refresh_interval", -1)
 				// Aggressive flushing helps keep the memory footprint
-				.put("index.translog.flush_threshold_size", "128mb")
+				.put("index.translog.flush_threshold_size", flushSizeInMb+"mb")
 				.put("bootstrap.mlockall", true)
 				// Nodes don't form a cluster, so routing allocations don't
 				// matter

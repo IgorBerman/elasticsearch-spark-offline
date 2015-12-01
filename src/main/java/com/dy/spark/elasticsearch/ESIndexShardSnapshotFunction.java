@@ -10,9 +10,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.spark.api.java.function.Function2;
 
-import com.google.common.base.Supplier;
-
 import scala.Tuple2;
+
+import com.google.common.base.Supplier;
 
 @RequiredArgsConstructor
 public class ESIndexShardSnapshotFunction<T> implements Function2<Integer, Iterator<Tuple2<String,T>>, Iterator<Void>>{

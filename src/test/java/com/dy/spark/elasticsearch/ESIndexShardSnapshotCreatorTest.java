@@ -8,8 +8,6 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import lombok.Data;
@@ -21,20 +19,16 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function2;
-import org.apache.spark.api.java.function.VoidFunction;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import akka.util.Timeout;
+import scala.Tuple2;
 
 import com.google.common.base.Supplier;
 import com.google.common.io.Files;
-
-import scala.Tuple2;
 
 public class ESIndexShardSnapshotCreatorTest implements Serializable {
 	private static final int TIMEOUT = 10000;

@@ -85,12 +85,12 @@ public class ESIndexShardSnapshotCreatorTest {
 	@Test
 	public void test() throws IOException, URISyntaxException, InterruptedException {		
 		String snapshotBase = "/tmp/es-test/snapshots-work/";
-		String snapshotFinalDestination="file:///tmp/es-test/my_backup_repo/";
 		String esWorkingBaseDir="/tmp/es-test/es-work/";
 		File templateFile = new File(ESIndexShardSnapshotCreatorTest.class.getResource("template.json").toURI().toURL().getFile());
 		String templateJson = FileUtils.readFileToString(templateFile);
 		
-		URI finalDestURI = new File(snapshotFinalDestination).toURI();
+		String snapshotFinalDestination="file:///tmp/es-test/my_backup_repo/";
+		URI finalDestURI = new URI(snapshotFinalDestination);
 		ESFilesTransport transport = new ESFilesTransport(FileSystem.get(finalDestURI, new Configuration()));
 		final ESIndexShardSnapshotCreator creator = new ESIndexShardSnapshotCreator(transport, 
 				snapshotBase, 

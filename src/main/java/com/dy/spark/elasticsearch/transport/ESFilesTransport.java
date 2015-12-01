@@ -80,23 +80,7 @@ public class ESFilesTransport {
 	
 	
 	private void ensurePathExists(String destination) throws IOException {
-		String[] pieces = StringUtils.split(destination, DIR_SEPARATOR);
-		
-		String path = "";
-		for(String piece : pieces) {
-			if(StringUtils.isEmpty(piece)) {
-				continue;
-			}
-			path = path + DIR_SEPARATOR + piece;
-			if(!fs.exists(new Path(path))) {
-				try{
-					fs.mkdirs(new Path(path));	
-				} catch (IOException e) {
-					log.error("Unable to create path " + path + " likely because it was created in another reducer thread.", e);
-					throw e;
-				}
-			}
-		}
+		fs.mkdirs(new Path(destination));
 	}
 
 	private void transferFile(String destination, String filename, String localDirectory) throws IOException {

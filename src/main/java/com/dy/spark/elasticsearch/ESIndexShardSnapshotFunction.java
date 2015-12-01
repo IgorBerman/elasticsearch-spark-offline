@@ -15,7 +15,7 @@ import scala.Tuple2;
 import com.google.common.base.Supplier;
 
 @RequiredArgsConstructor
-public class ESIndexShardSnapshotFunction<T> implements Function2<Integer, Iterator<Tuple2<String,T>>, Iterator<Void>>{
+class ESIndexShardSnapshotFunction<T> implements Function2<Integer, Iterator<Tuple2<String,T>>, Iterator<Void>>{
 	private final ESIndexShardSnapshotCreator creator;
 	private final Supplier<Configuration> configurationSupplier;
 	private final String destination;

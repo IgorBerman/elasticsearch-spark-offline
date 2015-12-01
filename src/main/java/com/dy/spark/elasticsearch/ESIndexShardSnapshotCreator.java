@@ -12,6 +12,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j;
 
@@ -38,12 +39,13 @@ import com.google.gson.Gson;
 
 @Log4j
 @RequiredArgsConstructor
+@Data
 public class ESIndexShardSnapshotCreator implements Serializable {
 	private static final int WAIT_FOR_COMPLETION_DELAY = 1000;
 	public static final String SNAPSHOT_NAME_PREFIX = "snapshot";
 	private final ESFilesTransport transport;
 	private final String snapshotWorkingLocationBase;
-	private final String snapshotFinalDestination;
+	private final String snapshotDestination;
 	private final String snapshotRepoName;
 	private final String esWorkingBaseDir;
 	private final String templateName;
@@ -197,8 +199,8 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 				waitForCompletion();
 			}
 
-			log.info("Moving shard snapshot of " + indexName+ "[" + partition +"]" + " to destination " + snapshotFinalDestination);
-			transport.move(fs, snapshotName, indexName, snapshotWorkingLocation, snapshotFinalDestination, partition, moveShards);
+			log.info("Moving shard snapshot of " + indexName+ "[" + partition +"]" + " to destination " + snapshotDestination);
+			transport.move(fs, snapshotName, indexName, snapshotWorkingLocation, snapshotDestination, partition, moveShards);
 
 			log.info("Deleting snapshot of " + indexName+ "[" + partition +"]" + snapshotName);
 			node.client().admin().cluster().prepareDeleteSnapshot(snapshotRepoName, snapshotName).execute().actionGet();
@@ -240,8 +242,9 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 	/**
 	 * We create another index snapshot for number of shards
 	 */
-	public void postprocess(FileSystem fs, String indexName, int numShardsPerIndex, String routing, String indexType, int timeout) throws IOException {
+	public void postprocess(FileSystem fs, String indexName, int numShardsPerIndex, String routing, String indexType, long timeout) throws IOException {
 		Iterator<Tuple2<String, Object>> docs = new ArrayList<Tuple2<String, Object>>().iterator();
 		createSnapshotAndMoveToDest(fs, indexName, numShardsPerIndex, numShardsPerIndex, 0, routing, indexType, docs, timeout, false);
 	}
+	
 }

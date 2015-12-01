@@ -5,28 +5,21 @@
 	<groupId>com.dy.sparkjobs</groupId>
 	<artifactId>elasticsearch-offline</artifactId>
 	<packaging>jar</packaging>
-	<version>1.0.26</version>
+	<version>0.0.1</version>
 	<name>elasticsearch-offline</name>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<java-version>1.7</java-version>
 		<junit.version>4.11</junit.version>
-		<mockito.version>1.9.5</mockito.version>
-		<analytics.core.version>0.1.93-SNAPSHOT</analytics.core.version>
-		<hadoop.core.version>2.2.0</hadoop.core.version>
-		<apache.commons-io.version>2.4</apache.commons-io.version>
-		<apache.commons-lang.version>2.5</apache.commons-lang.version>
-		<commons.codec.version>1.4</commons.codec.version>
-		<curator.version>2.4.0</curator.version>
 		<java.io.tmpdir>/tmp</java.io.tmpdir>
 		<surefire.version>2.7.2</surefire.version>
-		<mrunit.version>1.0.0</mrunit.version>
-		<joda.version>2.3</joda.version>
-		<jackson.version>1.9.2</jackson.version>
-		<logback.version>1.0.13</logback.version>
-		<aws-java-sdk.version>1.9.38</aws-java-sdk.version>
-		<org.apache.avro.version>1.7.4</org.apache.avro.version>
-		<jdkLevel>1.7</jdkLevel>
+		<spark.version>1.5.1</spark.version>
+		<spark.testing.base.version>1.5.1_0.2.1</spark.testing.base.version>
+		<es.version>1.6.0</es.version>
+		<gson.version>2.2.2</gson.version>
+		<lombok.version>1.14.8</lombok.version>
+		<log4j.version>1.2.17</log4j.version>
+		<hadoop.client.version>2.7.0</hadoop.client.version>
 	</properties>
 	
 	<licenses>
@@ -72,212 +65,55 @@
 
 
 	<dependencies>
-		<dependency>
-			<groupId>commons-codec</groupId>
-			<artifactId>commons-codec</artifactId>
-			<version>${commons.codec.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-mapper-lgpl</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-core-lgpl</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<artifactId>jackson-mapper-asl</artifactId>
-			<groupId>org.codehaus.jackson</groupId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-core-asl</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.avro</groupId>
-			<artifactId>avro</artifactId>
-			<version>${org.apache.avro.version}</version>
-			<scope>provided</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>us.monoid.web</groupId>
-			<artifactId>resty</artifactId>
-			<version>0.3.2</version>
-		</dependency>
-		<dependency>
-			<groupId>joda-time</groupId>
-			<artifactId>joda-time</artifactId>
-			<version>${joda.version}</version>
-		</dependency>
 
 		<dependency> <!-- Spark dependency -->
 			<groupId>org.apache.spark</groupId>
 			<artifactId>spark-core_2.10</artifactId>
-			<version>1.5.1</version>
+			<version>${spark.version}</version>
 			<scope>provided</scope>
 			<exclusions>
-				<!-- spark has another version -->
 				<exclusion>
 					<artifactId>jets3t</artifactId>
 					<groupId>net.java.dev.jets3t</groupId>
 				</exclusion>
 			</exclusions>
 		</dependency>
-
-
+		
 		<dependency>
-			<groupId>org.apache.curator</groupId>
-			<artifactId>curator-recipes</artifactId>
-			<version>${curator.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>org.apache.commons</groupId>
-					<artifactId>commons-math</artifactId>
-				</exclusion>
-				<exclusion>
-					<groupId>org.javassist</groupId>
-					<artifactId>javassist</artifactId>
-				</exclusion>
-				<exclusion>
-				    <artifactId>slf4j-log4j12</artifactId>
-				    <groupId>org.slf4j</groupId>
-				</exclusion>
-				<exclusion>
-				    <artifactId>log4j</artifactId>
-				    <groupId>log4j</groupId>
-				</exclusion>
-			</exclusions>
+			<groupId>com.holdenkarau</groupId>
+			<artifactId>spark-testing-base_2.10</artifactId>
+			<version>${spark.testing.base.version}</version>
+			<scope>test</scope>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.curator</groupId>
-			<artifactId>curator-framework</artifactId>
-			<version>2.3.0</version>
-			<exclusions>
-				<exclusion>
-					<artifactId>slf4j-api</artifactId>
-					<groupId>org.slf4j</groupId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-
-		<dependency>
-			<groupId>com.amazonaws</groupId>
-			<artifactId>aws-java-sdk</artifactId>
-			<version>${aws-java-sdk.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>com.fasterxml.jackson.core</groupId>
-					<artifactId>jackson-core</artifactId>
-				</exclusion>
-				<exclusion>
-					<groupId>com.fasterxml.jackson.core</groupId>
-					<artifactId>jackson-annotations</artifactId>
-				</exclusion>
-				<!-- <exclusion> <groupId>org.apache.httpcomponents</groupId> <artifactId>httpclient</artifactId> 
-					</exclusion> -->
-				<exclusion>
-					<groupId>commons-codec</groupId>
-					<artifactId>commons-codec</artifactId>
-				</exclusion>
-				<exclusion>
-					<artifactId>commons-logging</artifactId>
-					<groupId>commons-logging</groupId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-
-
-		<dependency>
-			<groupId>org.apache.mrunit</groupId>
-			<artifactId>mrunit</artifactId>
-			<version>${mrunit.version}</version>
-			<classifier>hadoop2</classifier>
-			<scope>provided</scope>
-		</dependency>
 		<dependency>
 			<groupId>org.elasticsearch</groupId>
 			<artifactId>elasticsearch</artifactId>
-			<version>1.6.0</version> 
+			<version>${es.version}</version> 
+			<scope>provided</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.google.code.gson</groupId>
 			<artifactId>gson</artifactId>
-			<version>2.3.1</version>
+			<version>${gson.version}</version>
 			<scope>provided</scope>
 		</dependency>
 
-		<!-- Logging -->
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<version>1.14.8</version>
+			<version>${lombok.version}</version>
+			<scope>provided</scope>
 		</dependency>
+		
 		<dependency>
 			<groupId>log4j</groupId>
 			<artifactId>log4j</artifactId>
-			<version>1.2.17</version>
-		</dependency>
-	
-		<!-- Utility packages -->
-		<dependency>
-			<groupId>commons-lang</groupId>
-			<artifactId>commons-lang</artifactId>
-			<version>${apache.commons-lang.version}</version>
+			<version>${log4j.version}</version>
 			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>commons-io</groupId>
-			<artifactId>commons-io</artifactId>
-			<version>${apache.commons-io.version}</version>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.commons</groupId>
-			<artifactId>commons-compress</artifactId>
-			<version>1.5</version>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>commons-httpclient</groupId>
-			<artifactId>commons-httpclient</artifactId>
-			<version>3.1</version>
-			<scope>provided</scope>
-			<exclusions>
-				<exclusion>
-					<artifactId>commons-codec</artifactId>
-					<groupId>commons-codec</groupId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.curator</groupId>
-			<artifactId>curator-test</artifactId>
-			<version>${curator.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>org.apache.commons</groupId>
-					<artifactId>commons-math</artifactId>
-				</exclusion>
-				<exclusion>
-					<groupId>org.javassist</groupId>
-					<artifactId>javassist</artifactId>
-				</exclusion>
-			</exclusions>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.javassist</groupId>
-			<artifactId>javassist</artifactId>
-			<version>3.18.1-GA</version>
-		</dependency>
 
 		<!-- Testing -->
 		<dependency>
@@ -288,107 +124,21 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.mockito</groupId>
-			<artifactId>mockito-all</artifactId>
-			<version>${mockito.version}</version>
-			<scope>test</scope>
-		</dependency>
-
-		<dependency>
 			<groupId>org.apache.hadoop</groupId>
-			<artifactId>hadoop-mapreduce-client-app</artifactId>
-			<version>${hadoop.core.version}</version>
-			<exclusions>
-				<exclusion>
-					<artifactId>jackson-core-asl</artifactId>
-					<groupId>org.codehaus.jackson</groupId>
-				</exclusion>
-				<exclusion>
-					<artifactId>jackson-mapper-asl</artifactId>
-					<groupId>org.codehaus.jackson</groupId>
-				</exclusion>
-				<exclusion>
-					<artifactId>avro</artifactId>
-					<groupId>org.apache.avro</groupId>
-				</exclusion>
-				<exclusion>
-				    <artifactId>slf4j-log4j12</artifactId>
-				    <groupId>org.slf4j</groupId>
-				</exclusion>
-				<exclusion>
-				    <artifactId>log4j</artifactId>
-				    <groupId>log4j</groupId>
-				</exclusion>
-			</exclusions>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.hadoop</groupId>
-			<artifactId>hadoop-common</artifactId>
-			<version>${hadoop.core.version}</version>
-			<exclusions>
-				<exclusion>
-					<artifactId>commons-codec</artifactId>
-					<groupId>commons-codec</groupId>
-				</exclusion>
-				<exclusion>
-					<artifactId>jackson-core-asl</artifactId>
-					<groupId>org.codehaus.jackson</groupId>
-				</exclusion>
-				<exclusion>
-					<artifactId>jackson-mapper-asl</artifactId>
-					<groupId>org.codehaus.jackson</groupId>
-				</exclusion>
-				<exclusion>
-					<artifactId>avro</artifactId>
-					<groupId>org.apache.avro</groupId>
-				</exclusion>
-				<exclusion>
-				    <artifactId>slf4j-log4j12</artifactId>
-				    <groupId>org.slf4j</groupId>
-				</exclusion>
-				<exclusion>
-				    <artifactId>log4j</artifactId>
-				    <groupId>log4j</groupId>
-				</exclusion>
-			</exclusions>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.hadoop</groupId>
-			<artifactId>hadoop-hdfs</artifactId>
-			<version>${hadoop.core.version}</version>
-			<exclusions>
-				<exclusion>
-					<artifactId>commons-codec</artifactId>
-					<groupId>commons-codec</groupId>
-				</exclusion>
-				<exclusion>
-					<artifactId>jackson-core-asl</artifactId>
-					<groupId>org.codehaus.jackson</groupId>
-				</exclusion>
-				<exclusion>
-					<artifactId>jackson-mapper-asl</artifactId>
-					<groupId>org.codehaus.jackson</groupId>
-				</exclusion>
-				<exclusion>
-				    <artifactId>log4j</artifactId>
-				    <groupId>log4j</groupId>
-				</exclusion>
-			</exclusions>
+			<artifactId>hadoop-client</artifactId>
+			<version>${hadoop.client.version}</version>
 			<scope>provided</scope>
 		</dependency>
 	</dependencies>
 	
 	<build>
 		<plugins>
-
 			<plugin>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.0</version>
 				<configuration>
-					<source>${jdkLevel}</source>
-					<target>${jdkLevel}</target>
+					<source>${java-version}</source>
+					<target>${java-version}</target>
 				</configuration>
 			</plugin>
 		</plugins>

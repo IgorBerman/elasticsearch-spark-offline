@@ -15,16 +15,15 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.junit.Test;
-
-import com.dy.spark.elasticsearch.transport.ESFilesTransport;
 
 import scala.Tuple2;
 
-public class ESIndexShardSnapshotCreatorTest {
+public class ESIndexShardSnapshotCreatorExample {
 	private static final int TIMEOUT = 10000;
 
+	@RequiredArgsConstructor
 	static class EsShardIndexingTask implements Runnable {
+		private final FileSystem fs;
 		private final int bulkSize;
 		private final String indexType;
 		private final int partNum;
@@ -32,15 +31,6 @@ public class ESIndexShardSnapshotCreatorTest {
 		private final int totalNumberOfDocsPerPartition;
 		private final String indexName;
 
-		private EsShardIndexingTask(int bulkSize, String indexType, int partNum,
-				ESIndexShardSnapshotCreator creator, int totalNumberOfDocsPerPartition, String indexName) {
-			this.bulkSize = bulkSize;
-			this.indexType = indexType;
-			this.partNum = partNum;
-			this.creator = creator;
-			this.totalNumberOfDocsPerPartition = totalNumberOfDocsPerPartition;
-			this.indexName = indexName;
-		}
 
 		@Override
 		public void run() {
@@ -53,7 +43,7 @@ public class ESIndexShardSnapshotCreatorTest {
 			try {
 				System.out.println("Creating");
 				//this will be done concurrently by workers
-				creator.<MyData>create(indexName, partNum, bulkSize, "", indexType, docs.iterator(), TIMEOUT);
+				creator.<MyData>create(fs, indexName, partNum, bulkSize, "", indexType, docs.iterator(), TIMEOUT);
 			} catch (IOException e) {
 				throw new RuntimeException(e);
 			}
@@ -82,16 +72,16 @@ public class ESIndexShardSnapshotCreatorTest {
 	  curl -XPOST 'http://localhost:9200/_snapshot/my_backup_repo/snapshot_my-index_1448807814444/_restore' 
 	 * 4. you should see 12 docs...
 	*/
-	@Test
-	public void test() throws IOException, URISyntaxException, InterruptedException {		
+	public static void main(String[] argv) throws IOException, URISyntaxException, InterruptedException {		
 		String snapshotBase = "/tmp/es-test/snapshots-work/";
 		String esWorkingBaseDir="/tmp/es-test/es-work/";
-		File templateFile = new File(ESIndexShardSnapshotCreatorTest.class.getResource("template.json").toURI().toURL().getFile());
+		File templateFile = new File(ESIndexShardSnapshotCreatorExample.class.getResource("template.json").toURI().toURL().getFile());
 		String templateJson = FileUtils.readFileToString(templateFile);
 		
 		String snapshotFinalDestination="file:///tmp/es-test/my_backup_repo/";
 		URI finalDestURI = new URI(snapshotFinalDestination);
-		ESFilesTransport transport = new ESFilesTransport(FileSystem.get(finalDestURI, new Configuration()));
+		FileSystem fs = FileSystem.get(finalDestURI, new Configuration());
+		ESFilesTransport transport = new ESFilesTransport();
 		final ESIndexShardSnapshotCreator creator = new ESIndexShardSnapshotCreator(transport, 
 				snapshotBase, 
 				snapshotFinalDestination,
@@ -112,14 +102,14 @@ public class ESIndexShardSnapshotCreatorTest {
 		
 		for (int part = 0; part < partitionsNum; part++) {
 			final int partNum = part;
-			pool.submit(new EsShardIndexingTask(bulkSize, indexType, partNum, creator, totalNumberOfDocsPerPartition, indexName));
+			pool.submit(new EsShardIndexingTask(fs, bulkSize, indexType, partNum, creator, totalNumberOfDocsPerPartition, indexName));
 		}
 		pool.shutdown();
 		while(!pool.awaitTermination(TIMEOUT, TimeUnit.MILLISECONDS)) {
 			System.out.println("Awaiting termination...");
 		}
 		//this stage will be done by driver(?) or one of the workers
-		creator.postprocess(indexName, partitionsNum, "", indexType, TIMEOUT);
+		creator.postprocess(fs, indexName, partitionsNum, "", indexType, TIMEOUT);
 		System.out.println("Everything took: " + TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - start) + " secs");
 	}
 

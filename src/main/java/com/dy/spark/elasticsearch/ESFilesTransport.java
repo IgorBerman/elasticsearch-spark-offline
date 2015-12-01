@@ -1,22 +1,19 @@
-package com.dy.spark.elasticsearch.transport;
+package com.dy.spark.elasticsearch;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Serializable;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.DirectoryFileFilter;
-import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 @RequiredArgsConstructor
-@Log4j
-public class ESFilesTransport {
+public class ESFilesTransport implements Serializable {
 	static final String DIR_SEPARATOR = File.separator;
-	private final FileSystem fs;
 
 	/**
 	 * Moves prepared locally shards data or index metadata to destination
@@ -28,7 +25,7 @@ public class ESFilesTransport {
 	 * @param moveShards - either to move shard data or index metadata
 	 * @throws IOException
 	 */
-	public void move(String snapshotName, String index, String snapshotWorkingLocation, String destination, int destShard, boolean moveShards) throws IOException {
+	public void move(FileSystem fs, String snapshotName, String index, String snapshotWorkingLocation, String destination, int destShard, boolean moveShards) throws IOException {
 		// Figure out which shard has all the data
 		String baseIndexShardLocation = snapshotWorkingLocation + DIR_SEPARATOR + "indices" + DIR_SEPARATOR+index;
 		
@@ -39,18 +36,18 @@ public class ESFilesTransport {
 			String shardSource =baseIndexShardLocation + DIR_SEPARATOR + largestShard;
 			
 			String shardDestination = destination + DIR_SEPARATOR + "indices" + DIR_SEPARATOR + index + DIR_SEPARATOR;
-			transferDir(shardDestination, shardSource, destShard);
+			transferDir(fs, shardDestination, shardSource, destShard);
 		} else {
 			// Upload top level manifests
-			transferFile(destination, "metadata-" + snapshotName, snapshotWorkingLocation);
-			transferFile(destination, "snapshot-" + snapshotName, snapshotWorkingLocation);
-			transferFile(destination, "index", snapshotWorkingLocation);
+			transferFile(fs, destination, "metadata-" + snapshotName, snapshotWorkingLocation);
+			transferFile(fs, destination, "snapshot-" + snapshotName, snapshotWorkingLocation);
+			transferFile(fs, destination, "index", snapshotWorkingLocation);
 			
 			
 			// Upload per-index manifests
 			String indexManifestSource =  baseIndexShardLocation;
 			String indexManifestDestination = destination + DIR_SEPARATOR + "indices" + DIR_SEPARATOR + index;
-			transferFile(indexManifestDestination, "snapshot-" + snapshotName, indexManifestSource);
+			transferFile(fs, indexManifestDestination, "snapshot-" + snapshotName, indexManifestSource);
 		}
 	}
 	
@@ -79,22 +76,22 @@ public class ESFilesTransport {
 	}
 	
 	
-	private void ensurePathExists(String destination) throws IOException {
+	private void ensurePathExists(FileSystem fs, String destination) throws IOException {
 		fs.mkdirs(new Path(destination));
 	}
 
-	private void transferFile(String destination, String filename, String localDirectory) throws IOException {
+	private void transferFile(FileSystem fs, String destination, String filename, String localDirectory) throws IOException {
 		Path source = new Path(localDirectory + DIR_SEPARATOR + filename);
-		ensurePathExists(destination);
+		ensurePathExists(fs, destination);
 		fs.copyFromLocalFile(false, true, source, new Path(destination + DIR_SEPARATOR + filename));	
 	}
 
-	private void transferDir(String destination, String localShardPath, int shard) throws IOException {
+	private void transferDir(FileSystem fs, String destination, String localShardPath, int shard) throws IOException {
 		destination = destination + shard + DIR_SEPARATOR;
-		ensurePathExists(destination);
+		ensurePathExists(fs, destination);
 		File[] files = new File(localShardPath).listFiles();
 		for (File file : files) {
-			transferFile(destination, file.getName(), localShardPath);
+			transferFile(fs, destination, file.getName(), localShardPath);
 		}
 	}
 }

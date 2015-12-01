@@ -5,6 +5,7 @@ import static org.elasticsearch.node.NodeBuilder.nodeBuilder;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.fs.FileSystem;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
@@ -32,12 +34,11 @@ import org.elasticsearch.plugins.PluginsService;
 
 import scala.Tuple2;
 
-import com.dy.spark.elasticsearch.transport.ESFilesTransport;
 import com.google.gson.Gson;
 
 @Log4j
 @RequiredArgsConstructor
-public class ESIndexShardSnapshotCreator {
+public class ESIndexShardSnapshotCreator implements Serializable {
 	private static final int WAIT_FOR_COMPLETION_DELAY = 1000;
 	public static final String SNAPSHOT_NAME_PREFIX = "snapshot";
 	private final ESFilesTransport transport;
@@ -50,11 +51,12 @@ public class ESIndexShardSnapshotCreator {
 	private final int maxMergedSegment;
 	private final int flushSizeInMb; 
 
-	public <T> void create(String indexName, int partition, int bulkSize, String routing, String indexType, Iterator<Tuple2<String, T>> docs, long timeout) throws IOException {
-		createSnapshotAndMoveToDest(indexName, partition, 1, bulkSize, routing, indexType, docs, timeout, true);
+	public <T> void create(FileSystem fs, String indexName, int partition, int bulkSize, String routing, String indexType, Iterator<Tuple2<String, T>> docs, long timeout) throws IOException {
+		createSnapshotAndMoveToDest(fs, indexName, partition, 1, bulkSize, routing, indexType, docs, timeout, true);
 	}
 	
-	private <T> void createSnapshotAndMoveToDest(String indexName, 
+	private <T> void createSnapshotAndMoveToDest(FileSystem fs, 
+			String indexName, 
 			int partition, 
 			int numShardsPerIndex,
 			int bulkSize,
@@ -196,7 +198,7 @@ public class ESIndexShardSnapshotCreator {
 			}
 
 			log.info("Moving shard snapshot of " + indexName+ "[" + partition +"]" + " to destination " + snapshotFinalDestination);
-			transport.move(snapshotName, indexName, snapshotWorkingLocation, snapshotFinalDestination, partition, moveShards);
+			transport.move(fs, snapshotName, indexName, snapshotWorkingLocation, snapshotFinalDestination, partition, moveShards);
 
 			log.info("Deleting snapshot of " + indexName+ "[" + partition +"]" + snapshotName);
 			node.client().admin().cluster().prepareDeleteSnapshot(snapshotRepoName, snapshotName).execute().actionGet();
@@ -238,8 +240,8 @@ public class ESIndexShardSnapshotCreator {
 	/**
 	 * We create another index snapshot for number of shards
 	 */
-	public void postprocess(String indexName, int numShardsPerIndex, String routing, String indexType, int timeout) throws IOException {
+	public void postprocess(FileSystem fs, String indexName, int numShardsPerIndex, String routing, String indexType, int timeout) throws IOException {
 		Iterator<Tuple2<String, Object>> docs = new ArrayList<Tuple2<String, Object>>().iterator();
-		createSnapshotAndMoveToDest(indexName, numShardsPerIndex, numShardsPerIndex, 0, routing, indexType, docs, timeout, false);
+		createSnapshotAndMoveToDest(fs, indexName, numShardsPerIndex, numShardsPerIndex, 0, routing, indexType, docs, timeout, false);
 	}
 }

@@ -2,6 +2,7 @@ package com.dy.spark.elasticsearch;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,12 +13,13 @@ import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.junit.Test;
 
-import scala.Tuple2;
+import com.dy.spark.elasticsearch.transport.ESFilesTransport;
 
-import com.dy.spark.elasticsearch.transport.BaseTransport;
-import com.dy.spark.elasticsearch.transport.LocalFSSnapshotTransport;
+import scala.Tuple2;
 
 public class ESIndexShardSnapshotCreatorTest {
 	private static final int TIMEOUT = 10000;
@@ -50,6 +52,7 @@ public class ESIndexShardSnapshotCreatorTest {
 			}
 			try {
 				System.out.println("Creating");
+				//this will be done concurrently by workers
 				creator.<MyData>create(indexName, partNum, bulkSize, "", indexType, docs.iterator(), TIMEOUT);
 			} catch (IOException e) {
 				throw new RuntimeException(e);
@@ -80,14 +83,15 @@ public class ESIndexShardSnapshotCreatorTest {
 	 * 4. you should see 12 docs...
 	*/
 	@Test
-	public void test() throws IOException, URISyntaxException, InterruptedException {
+	public void test() throws IOException, URISyntaxException, InterruptedException {		
 		String snapshotBase = "/tmp/es-test/snapshots-work/";
-		String snapshotFinalDestination="/tmp/es-test/my_backup_repo/";
-		BaseTransport transport = new LocalFSSnapshotTransport();
+		String snapshotFinalDestination="file:///tmp/es-test/my_backup_repo/";
 		String esWorkingBaseDir="/tmp/es-test/es-work/";
 		File templateFile = new File(ESIndexShardSnapshotCreatorTest.class.getResource("template.json").toURI().toURL().getFile());
 		String templateJson = FileUtils.readFileToString(templateFile);
 		
+		URI finalDestURI = new File(snapshotFinalDestination).toURI();
+		ESFilesTransport transport = new ESFilesTransport(FileSystem.get(finalDestURI, new Configuration()));
 		final ESIndexShardSnapshotCreator creator = new ESIndexShardSnapshotCreator(transport, 
 				snapshotBase, 
 				snapshotFinalDestination,
@@ -95,7 +99,7 @@ public class ESIndexShardSnapshotCreatorTest {
 				esWorkingBaseDir, 
 				"es-template", 
 				templateJson,
-				1000,
+				100,
 				512);
 		final String indexName = "my-index_" +System.currentTimeMillis();
 		final String indexType = "mydata";//should be consistent with template.json
@@ -103,9 +107,9 @@ public class ESIndexShardSnapshotCreatorTest {
 		long start = System.currentTimeMillis();
 		final int partitionsNum = 4;
 		final int bulkSize = 10000;
-		final int totalNumberOfDocsPerPartition = 3_000_000;//1_078_671_786;
+		final int totalNumberOfDocsPerPartition = 10;//5_000_000;//1_078_671_786;
 		ExecutorService pool = Executors.newFixedThreadPool(partitionsNum);
-		//this will be done concurrently by workers
+		
 		for (int part = 0; part < partitionsNum; part++) {
 			final int partNum = part;
 			pool.submit(new EsShardIndexingTask(bulkSize, indexType, partNum, creator, totalNumberOfDocsPerPartition, indexName));

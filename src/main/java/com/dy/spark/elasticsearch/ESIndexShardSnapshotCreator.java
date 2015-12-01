@@ -32,7 +32,7 @@ import org.elasticsearch.plugins.PluginsService;
 
 import scala.Tuple2;
 
-import com.dy.spark.elasticsearch.transport.BaseTransport;
+import com.dy.spark.elasticsearch.transport.ESFilesTransport;
 import com.google.gson.Gson;
 
 @Log4j
@@ -40,7 +40,7 @@ import com.google.gson.Gson;
 public class ESIndexShardSnapshotCreator {
 	private static final int WAIT_FOR_COMPLETION_DELAY = 1000;
 	public static final String SNAPSHOT_NAME_PREFIX = "snapshot";
-	private final BaseTransport transport;
+	private final ESFilesTransport transport;
 	private final String snapshotWorkingLocationBase;
 	private final String snapshotFinalDestination;
 	private final String snapshotRepoName;
@@ -83,29 +83,18 @@ public class ESIndexShardSnapshotCreator {
 				.put("path.home", esWorkingDir)
 				// Allow plugins if they're bundled in with the uuberjar
 				.put("plugins." + PluginsService.LOAD_PLUGIN_FROM_CLASSPATH, true)
-				.put("index.refresh_interval", -1)
-				// Aggressive flushing helps keep the memory footprint
-				.put("index.translog.flush_threshold_size", flushSizeInMb+"mb")
 				.put("bootstrap.mlockall", true)
 				// Nodes don't form a cluster, so routing allocations don't
 				// matter
 				.put("cluster.routing.allocation.disk.watermark.low", 99)
 				.put("cluster.routing.allocation.disk.watermark.high", 99)
-				.put("index.load_fixed_bitset_filters_eagerly", false)
 				// Allow indexing to max out disk IO
 				.put("indices.store.throttle.type", "none")
 				// The default 10% is a bit large b/c it's calculated against
 				// JVM heap size & not Yarn container allocation. Choosing a
 				// good value here could be made smarter.
 				.put("indices.memory.index_buffer_size", "5%")
-				// The default 5gb segment max size is too large for the typical
-				// hadoop node
-				// .put("index.merge.policy.max_merge_at_once", 10)
-				.put("index.merge.policy.max_merged_segment", maxMergedSegment + "mb")
-				.put("index.merge.policy.segments_per_tier", 4)
-				.put("index.merge.scheduler.max_thread_count", 1)
 				.put("path.repo", snapshotWorkingLocation)
-				.put("index.compound_format", false) 
 				// .put("index.codec", "best_compression") // Lucene 5/ES 2.0
 				// feature to play with when that's out
 				.put("indices.fielddata.cache.size", "0%");
@@ -128,7 +117,7 @@ public class ESIndexShardSnapshotCreator {
 			Map<String, Object> settings = new HashMap<>();
 			settings.put("location", snapshotWorkingLocation);
 			settings.put("compress", true);
-			settings.put("max_snapshot_bytes_per_sec", "400mb"); // The default
+			settings.put("max_snapshot_bytes_per_sec", "1024mb"); // The default
 																	// 20mb/sec is
 																	// very slow for
 																	// a local disk
@@ -140,7 +129,19 @@ public class ESIndexShardSnapshotCreator {
 			node.client().admin().indices().prepareCreate(indexName)
 					.setSettings(settingsBuilder()
 							.put("index.number_of_replicas", 0)
-							.put("index.number_of_shards", numShardsPerIndex)).get();
+							.put("index.number_of_shards", numShardsPerIndex)
+							//.put("index.merge.policy.max_merge_at_once", 10)
+							//.put("index.merge.policy.segments_per_tier", 15)//should be more than max_merge_at_once
+							.put("index.refresh_interval", -1)//this one is VERY important...
+							// The default 5gb segment max size is too large for the typical
+							// hadoop node
+							.put("index.merge.policy.max_merged_segment", maxMergedSegment)
+							.put("index.merge.scheduler.max_thread_count", 1)
+							.put("index.load_fixed_bitset_filters_eagerly", false)
+							.put("index.compound_format", false) 
+							//Aggressive flushing helps keep the memory footprint
+							.put("index.translog.flush_threshold_size", flushSizeInMb+"mb")
+							).get();
 
 			log.info("Starting indexing documents "+ indexName + "[" + partition +"]");
 			BulkRequestBuilder bulkRequest = node.client().prepareBulk();
@@ -195,7 +196,7 @@ public class ESIndexShardSnapshotCreator {
 			}
 
 			log.info("Moving shard snapshot of " + indexName+ "[" + partition +"]" + " to destination " + snapshotFinalDestination);
-			transport.move(snapshotName, indexName, snapshotWorkingLocation, snapshotFinalDestination, String.valueOf(partition), moveShards);
+			transport.move(snapshotName, indexName, snapshotWorkingLocation, snapshotFinalDestination, partition, moveShards);
 
 			log.info("Deleting snapshot of " + indexName+ "[" + partition +"]" + snapshotName);
 			node.client().admin().cluster().prepareDeleteSnapshot(snapshotRepoName, snapshotName).execute().actionGet();

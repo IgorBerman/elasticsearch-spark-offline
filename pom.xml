@@ -2,11 +2,11 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>com.dy.sparkjobs</groupId>
-	<artifactId>elasticsearch-offline</artifactId>
+	<groupId>com.dy</groupId>
+	<artifactId>elasticsearch-spark-offline</artifactId>
 	<packaging>jar</packaging>
-	<version>0.0.1</version>
-	<name>elasticsearch-offline</name>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>elasticsearch-spark-offline</name>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<java-version>1.7</java-version>

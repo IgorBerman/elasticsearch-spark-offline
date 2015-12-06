@@ -28,6 +28,7 @@ import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.base.Joiner;
 import org.elasticsearch.common.settings.ImmutableSettings;
+import org.elasticsearch.common.settings.ImmutableSettings.Builder;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.hadoop.cfg.PropertiesSettings;
@@ -54,7 +55,8 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 	private final String templateName;
 	private final String templateJson;
 	private final int maxMergedSegment;
-	private final int flushSizeInMb;	
+	private final int flushSizeInMb;
+	
 
 	public <K,V> void create(
 			FileSystem fs, 
@@ -113,7 +115,9 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 				.put("path.repo", snapshotWorkingLocation)
 				// feature to play with when that's out
 				.put("indices.fielddata.cache.size", "0%");
-
+		
+		
+		builder.put(additionalEsSettings);
 		Settings nodeSettings = builder.build();
 
 		// Create the node
@@ -125,43 +129,42 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 		try {
 			// Start ES
 			node.start();
-
 			node.client().admin().indices().preparePutTemplate(templateName).setSource(templateJson).get();
-
 			// Create the snapshot repo
-			Map<String, Object> settings = new HashMap<>();
-			settings.put("location", snapshotWorkingLocation);
-			settings.put("compress", true);
+			Map<String, Object> repositorySettings = new HashMap<>();
+			repositorySettings.put("location", snapshotWorkingLocation);
+			repositorySettings.put("compress", true);
 			// The default 20mb/sec is very slow for a local disk to disk snapshot
-			settings.put("max_snapshot_bytes_per_sec", "1024mb"); 
-			node.client().admin().cluster().preparePutRepository(snapshotRepoName).setType("fs").setSettings(settings).get();
+			repositorySettings.put("max_snapshot_bytes_per_sec", "1024mb"); 
+			node.client().admin().cluster().preparePutRepository(snapshotRepoName).setType("fs").setSettings(repositorySettings).get();
 
 			log.debug("Creating index " + indexName + "[" + partition + "]" + " with 0 replicas and " + numShardsPerIndex + " number of shards");
+			Builder createIndexSettings = settingsBuilder()
+					.put("index.number_of_replicas", 0)
+					.put("index.number_of_shards", numShardsPerIndex)
+					// .put("index.merge.policy.max_merge_at_once",
+					// 10)
+					// .put("index.merge.policy.segments_per_tier",
+					// 15)//should be more than
+					// max_merge_at_once
+					.put("index.refresh_interval", -1)
+					// this one is VERY important...
+					// The default 5gb segment max size is too
+					// large for the typical
+					// hadoop node
+					.put("index.merge.policy.max_merged_segment", maxMergedSegment)
+					.put("index.merge.scheduler.max_thread_count", 1)
+					.put("index.load_fixed_bitset_filters_eagerly", false)
+					.put("index.compound_format", false)
+					// Aggressive flushing helps keep the memory
+					// footprint
+					.put("index.translog.flush_threshold_size", flushSizeInMb + "mb");
+			createIndexSettings.put(additionalEsSettings);
 			node.client()
 					.admin()
 					.indices()
 					.prepareCreate(indexName)
-					.setSettings(
-							settingsBuilder()
-									.put("index.number_of_replicas", 0)
-									.put("index.number_of_shards", numShardsPerIndex)
-									// .put("index.merge.policy.max_merge_at_once",
-									// 10)
-									// .put("index.merge.policy.segments_per_tier",
-									// 15)//should be more than
-									// max_merge_at_once
-									.put("index.refresh_interval", -1)
-									// this one is VERY important...
-									// The default 5gb segment max size is too
-									// large for the typical
-									// hadoop node
-									.put("index.merge.policy.max_merged_segment", maxMergedSegment)
-									.put("index.merge.scheduler.max_thread_count", 1)
-									.put("index.load_fixed_bitset_filters_eagerly", false)
-									.put("index.compound_format", false)
-									// Aggressive flushing helps keep the memory
-									// footprint
-									.put("index.translog.flush_threshold_size", flushSizeInMb + "mb")).get();
+					.setSettings(createIndexSettings).get();
 
 			log.info("Starting indexing documents " + indexName + "[" + partition + "]");
 			BulkRequestBuilder bulkRequest = node.client().prepareBulk();

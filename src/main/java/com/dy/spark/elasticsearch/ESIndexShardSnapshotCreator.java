@@ -18,6 +18,8 @@ import lombok.extern.log4j.Log4j;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.io.file.tfile.ByteArray;
+import org.apache.lucene.util.BytesRefArray;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
@@ -27,6 +29,7 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.base.Joiner;
+import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.ImmutableSettings.Builder;
 import org.elasticsearch.common.settings.Settings;
@@ -37,6 +40,8 @@ import org.elasticsearch.hadoop.util.FastByteArrayOutputStream;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.spark.serialization.ScalaValueWriter;
+
+import com.google.gson.Gson;
 
 import scala.Tuple2;
 
@@ -169,7 +174,6 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			log.info("Starting indexing documents " + indexName + "[" + partition + "]");
 			BulkRequestBuilder bulkRequest = node.client().prepareBulk();
 
-			
 			ScalaValueWriter scalaValueWriter = new ScalaValueWriter();
 			org.elasticsearch.hadoop.cfg.Settings writerSettings = new PropertiesSettings();
 			for (Map.Entry<String, String> e : additionalEsSettings.entrySet()) {
@@ -185,13 +189,13 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 				FastByteArrayOutputStream bos = new FastByteArrayOutputStream();
 		        V doc = id2doc._2();
 				ContentBuilder.generate(bos, scalaValueWriter).value(doc).flush().close();		        
-				byte[] docBytes = bos.bytes().bytes();
-				
 				K id = id2doc._1();
-				IndexRequestBuilder indexRequestBuilder = node.client().prepareIndex(indexName, indexType)
-						.setId(String.valueOf(id))
+				String idAsStr = String.valueOf(id);
+				IndexRequestBuilder indexRequestBuilder = node.client()
+						.prepareIndex(indexName, indexType, idAsStr)
 						// .setRouting(routing)
-						.setSource(docBytes);
+						//.setSource(gson.toJson(doc));
+						.setSource(bos.bytes().bytes(), 0, bos.bytes().length());
 				bulkRequest.add(indexRequestBuilder);
 				countInBulk++;
 				total++;

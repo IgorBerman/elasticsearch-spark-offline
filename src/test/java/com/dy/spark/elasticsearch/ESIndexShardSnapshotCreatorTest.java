@@ -6,7 +6,9 @@ import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import lombok.Data;
@@ -81,18 +83,23 @@ public class ESIndexShardSnapshotCreatorTest implements Serializable {
 		File templateFile = new File(ESIndexShardSnapshotCreatorTest.class.getResource("template.json").toURI().toURL()
 				.getFile());
 		String templateJson = FileUtils.readFileToString(templateFile);
-
+		Map<String,String> additionalEsSettings = new HashMap<>();
 		ESFilesTransport transport = new ESFilesTransport();
 		String snapshotRepoName = "my_backup_repo";
-		final ESIndexShardSnapshotCreator creator = new ESIndexShardSnapshotCreator(transport, snapshotBase,
+		final ESIndexShardSnapshotCreator creator = new ESIndexShardSnapshotCreator(transport, additionalEsSettings, snapshotBase,
 				destination, snapshotRepoName, esWorkingBaseDir, "es-template", templateJson, 100, 512);
 		final String indexName = "my-index_" + System.currentTimeMillis();
 		final String indexType = "mydata";// should be consistent with
 											// template.json
 		Supplier<Configuration> configurationSupplier = new ConfigSupplier();
 		final int bulkSize = 10000;
-		ESIndexShardSnapshotPipeline<MyData> pipeline = new ESIndexShardSnapshotPipeline<>(creator,
-				configurationSupplier, indexName, indexType, bulkSize, TIMEOUT);
+		ESIndexShardSnapshotPipeline<String, MyData> pipeline = new ESIndexShardSnapshotPipeline<>(
+				creator,
+				configurationSupplier, 
+				indexName, 
+				indexType, 
+				bulkSize, 
+				TIMEOUT);
 
 		long start = System.currentTimeMillis();
 		final int partitionsNum = 4;

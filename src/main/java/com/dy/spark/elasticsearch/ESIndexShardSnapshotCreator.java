@@ -30,6 +30,7 @@ import org.elasticsearch.common.base.Joiner;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.hadoop.cfg.PropertiesSettings;
 import org.elasticsearch.hadoop.serialization.builder.ContentBuilder;
 import org.elasticsearch.hadoop.util.FastByteArrayOutputStream;
 import org.elasticsearch.node.Node;
@@ -45,6 +46,7 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 	private static final int WAIT_FOR_COMPLETION_DELAY = 1000;
 	public static final String SNAPSHOT_NAME_PREFIX = "snapshot";
 	private final ESFilesTransport transport;
+	private final Map<String, String> additionalEsSettings;
 	private final String snapshotWorkingLocationBase;
 	private final String snapshotDestination;
 	private final String snapshotRepoName;
@@ -52,21 +54,21 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 	private final String templateName;
 	private final String templateJson;
 	private final int maxMergedSegment;
-	private final int flushSizeInMb;
+	private final int flushSizeInMb;	
 
-	public <T> void create(
+	public <K,V> void create(
 			FileSystem fs, 
 			String indexName, 
 			int partition, 
 			int bulkSize, 
 			String routing,
 			String indexType, 
-			Iterator<Tuple2<String, T>> docs, 
+			Iterator<Tuple2<K,V>> docs, 
 			long timeout) throws IOException {
 		createSnapshotAndMoveToDest(fs, indexName, partition, 1, bulkSize, routing, indexType, docs, timeout, true);
 	}
 
-	private <T> void createSnapshotAndMoveToDest(
+	private <K,V> void createSnapshotAndMoveToDest(
 			FileSystem fs, 
 			String indexName, 
 			int partition, 
@@ -74,7 +76,7 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			int bulkSize, 
 			String routing, 
 			String indexType, 
-			Iterator<Tuple2<String, T>> docs, 
+			Iterator<Tuple2<K, V>> docs, 
 			long timeout,
 			boolean moveShards) throws IOException {
 		log.info("Creating snapshot of shard for index " + indexName + "[" + partition + "]");
@@ -90,7 +92,8 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 		org.elasticsearch.common.settings.ImmutableSettings.Builder builder = ImmutableSettings
 				.builder()
 				// Disable HTTP transport, we'll communicate inner-jvm
-				.put("http.enabled", false).put("processors", 1)
+				.put("http.enabled", false)
+				.put("processors", 1)
 				.put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, numShardsPerIndex)
 				.put("node.name", nodeName)
 				.put("path.home", esWorkingDir)
@@ -108,7 +111,6 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 				// good value here could be made smarter.
 				.put("indices.memory.index_buffer_size", "5%")
 				.put("path.repo", snapshotWorkingLocation)
-				// .put("index.codec", "best_compression") // Lucene 5/ES 2.0
 				// feature to play with when that's out
 				.put("indices.fielddata.cache.size", "0%");
 
@@ -130,20 +132,11 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			Map<String, Object> settings = new HashMap<>();
 			settings.put("location", snapshotWorkingLocation);
 			settings.put("compress", true);
-			settings.put("max_snapshot_bytes_per_sec", "1024mb"); // The default
-																	// 20mb/sec
-																	// is
-																	// very slow
-																	// for
-																	// a local
-																	// disk
-																	// to disk
-																	// snapshot
-			node.client().admin().cluster().preparePutRepository(snapshotRepoName).setType("fs").setSettings(settings)
-					.get();
+			// The default 20mb/sec is very slow for a local disk to disk snapshot
+			settings.put("max_snapshot_bytes_per_sec", "1024mb"); 
+			node.client().admin().cluster().preparePutRepository(snapshotRepoName).setType("fs").setSettings(settings).get();
 
-			log.debug("Creating index " + indexName + "[" + partition + "]" + " with 0 replicas and "
-					+ numShardsPerIndex + " number of shards");
+			log.debug("Creating index " + indexName + "[" + partition + "]" + " with 0 replicas and " + numShardsPerIndex + " number of shards");
 			node.client()
 					.admin()
 					.indices()
@@ -173,19 +166,27 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			log.info("Starting indexing documents " + indexName + "[" + partition + "]");
 			BulkRequestBuilder bulkRequest = node.client().prepareBulk();
 
+			
 			ScalaValueWriter scalaValueWriter = new ScalaValueWriter();
+			org.elasticsearch.hadoop.cfg.Settings writerSettings = new PropertiesSettings();
+			for (Map.Entry<String, String> e : additionalEsSettings.entrySet()) {
+				writerSettings.setProperty(e.getKey(), e.getValue());
+			}
+			scalaValueWriter.setSettings(writerSettings);
+			
 			int total = 0;
 			int countInBulk = 0;
 			while (docs.hasNext()) {
-				Tuple2<String, T> doc = docs.next();
+				Tuple2<K, V> id2doc = docs.next();
 
 				FastByteArrayOutputStream bos = new FastByteArrayOutputStream();
-		        ContentBuilder.generate(bos, scalaValueWriter).value(doc._2()).flush().close();		        
-				
+		        V doc = id2doc._2();
+				ContentBuilder.generate(bos, scalaValueWriter).value(doc).flush().close();		        
 				byte[] docBytes = bos.bytes().bytes();
 				
+				K id = id2doc._1();
 				IndexRequestBuilder indexRequestBuilder = node.client().prepareIndex(indexName, indexType)
-						.setId(doc._1())
+						.setId(String.valueOf(id))
 						// .setRouting(routing)
 						.setSource(docBytes);
 				bulkRequest.add(indexRequestBuilder);
@@ -271,14 +272,14 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 	/**
 	 * We create another index snapshot for number of shards
 	 */
-	public void postprocess(
+	public <K,V> void postprocess(
 			FileSystem fs, 
 			String indexName, 
 			int numShardsPerIndex, 
 			String routing, 
 			String indexType,
 			long timeout) throws IOException {
-		Iterator<Tuple2<String, Object>> docs = new ArrayList<Tuple2<String, Object>>().iterator();
+		Iterator<Tuple2<K, V>> docs = new ArrayList<Tuple2<K, V>>().iterator();
 		createSnapshotAndMoveToDest(fs, indexName, numShardsPerIndex, numShardsPerIndex, 0, routing, indexType, docs,
 				timeout, false);
 	}

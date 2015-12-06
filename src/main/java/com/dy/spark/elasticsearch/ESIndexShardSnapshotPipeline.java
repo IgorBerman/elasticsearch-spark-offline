@@ -15,7 +15,7 @@ import scala.Tuple2;
 import com.google.common.base.Supplier;
 
 @RequiredArgsConstructor
-public class ESIndexShardSnapshotPipeline<T> {
+public class ESIndexShardSnapshotPipeline<K,V> {
 	private final ESIndexShardSnapshotCreator creator;
 	private final Supplier<Configuration> configurationSupplier;
 	private final String indexName;
@@ -23,14 +23,14 @@ public class ESIndexShardSnapshotPipeline<T> {
 	private final int bulkSize;
 	private final long timeout;
 
-	public void process(JavaPairRDD<String, T> pairRDD) throws Exception {
+	public void process(JavaPairRDD<K, V> pairRDD) throws Exception {
 		URI finalDestURI = new URI(creator.getSnapshotDestination());
-		Function2<Integer, Iterator<Tuple2<String, T>>, Iterator<Void>> snapshotFunc = 
-			new ESIndexShardSnapshotFunction<T>(creator, configurationSupplier, creator.getSnapshotDestination(), indexName, bulkSize, indexType, timeout);
+		Function2<Integer, Iterator<Tuple2<K, V>>, Iterator<Void>> snapshotFunc = 
+			new ESIndexShardSnapshotFunction<K,V>(creator, configurationSupplier, creator.getSnapshotDestination(), indexName, bulkSize, indexType, timeout);
 		
 		pairRDD.mapPartitionsWithIndex(snapshotFunc, true).count();
 		
-		FileSystem fs = FileSystem.get(finalDestURI, new Configuration());		
+		FileSystem fs = FileSystem.get(finalDestURI, configurationSupplier.get());		
 		creator.postprocess(fs, indexName, pairRDD.partitions().size(), "", indexType, timeout);
 	}
 }

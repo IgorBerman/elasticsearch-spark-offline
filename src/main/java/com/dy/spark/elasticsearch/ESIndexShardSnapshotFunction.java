@@ -15,7 +15,7 @@ import scala.Tuple2;
 import com.google.common.base.Supplier;
 
 @RequiredArgsConstructor
-class ESIndexShardSnapshotFunction<T> implements Function2<Integer, Iterator<Tuple2<String,T>>, Iterator<Void>>{
+class ESIndexShardSnapshotFunction<K,V> implements Function2<Integer, Iterator<Tuple2<K,V>>, Iterator<Void>>{
 	private final ESIndexShardSnapshotCreator creator;
 	private final Supplier<Configuration> configurationSupplier;
 	private final String destination;
@@ -25,7 +25,7 @@ class ESIndexShardSnapshotFunction<T> implements Function2<Integer, Iterator<Tup
 	private final long timeout;
 
 	@Override
-	public Iterator<Void> call(Integer partNum, Iterator<Tuple2<String, T>> data) throws Exception {
+	public Iterator<Void> call(Integer partNum, Iterator<Tuple2<K, V>> data) throws Exception {
 		FileSystem fs = FileSystem.get(new URI(destination), configurationSupplier.get());
 		creator.create(fs, indexName, partNum, bulkSize, "", indexType, data, timeout);
 		return new ArrayList<Void>().iterator();

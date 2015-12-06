@@ -18,8 +18,6 @@ import lombok.extern.log4j.Log4j;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.io.file.tfile.ByteArray;
-import org.apache.lucene.util.BytesRefArray;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
 import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
@@ -31,7 +29,6 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.base.Joiner;
-import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.ImmutableSettings.Builder;
 import org.elasticsearch.common.settings.Settings;
@@ -43,8 +40,6 @@ import org.elasticsearch.node.Node;
 import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.snapshots.SnapshotInfo;
 import org.elasticsearch.spark.serialization.ScalaValueWriter;
-
-import com.google.gson.Gson;
 
 import scala.Tuple2;
 
@@ -88,7 +83,7 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			String indexType, 
 			Iterator<Tuple2<K, V>> docs, 
 			long timeout,
-			boolean moveShards) throws IOException {
+			boolean isShard) throws IOException {
 		log.info("Creating snapshot of shard for index " + indexName + "[" + partition + "]");
 		String snapshotWorkingLocation = Joiner.on("/").join(snapshotWorkingLocationBase, snapshotRepoName, indexName,
 				partition);
@@ -234,7 +229,7 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			CreateSnapshotResponse createSnapshotResponse = node.client().admin().cluster()
 					.prepareCreateSnapshot(snapshotRepoName, snapshotName)
 					.setWaitForCompletion(true)
-					.setPartial(!moveShards)
+					.setPartial(!isShard)
 					.setIndices(indexName).get();
 			SnapshotInfo snapshotInfo = createSnapshotResponse.getSnapshotInfo();
 			log.info("Snapshot response " + indexName + "[" + partition + "]: status " + snapshotInfo.status() + ", failed shards:" + snapshotInfo.failedShards() + "(" + snapshotInfo.shardFailures() + ")");
@@ -249,7 +244,7 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			log.info("Moving shard snapshot of " + indexName + "[" + partition + "]" + " to destination "
 					+ snapshotDestination);
 			transport.move(fs, snapshotName, indexName, snapshotWorkingLocation, snapshotDestination, partition,
-					moveShards);
+					isShard);
 
 			log.info("Deleting snapshot of " + indexName + "[" + partition + "]" + snapshotName);
 			node.client().admin().cluster().prepareDeleteSnapshot(snapshotRepoName, snapshotName).execute().actionGet();

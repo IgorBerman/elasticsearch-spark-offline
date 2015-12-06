@@ -21,6 +21,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.file.tfile.ByteArray;
 import org.apache.lucene.util.BytesRefArray;
 import org.elasticsearch.action.ActionFuture;
+import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
+import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
@@ -39,6 +41,7 @@ import org.elasticsearch.hadoop.serialization.builder.ContentBuilder;
 import org.elasticsearch.hadoop.util.FastByteArrayOutputStream;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.plugins.PluginsService;
+import org.elasticsearch.snapshots.SnapshotInfo;
 import org.elasticsearch.spark.serialization.ScalaValueWriter;
 
 import com.google.gson.Gson;
@@ -213,19 +216,28 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 				submitBulk(bulkRequest, total);
 			}
 
-			TimeValue v = new TimeValue(timeout);
+			//TimeValue v = new TimeValue(timeout);
 
 			log.info("Flushing " + indexName + "[" + partition + "]");
-			node.client().admin().indices().prepareFlush(indexName).get(v);
+			node.client().admin().indices().prepareFlush(indexName).get();
 
 			log.info("Optimizing " + indexName + "[" + partition + "]");
-			node.client().admin().indices().prepareOptimize(indexName).get(v);
+			node.client().admin().indices().prepareOptimize(indexName).get();
 
+			log.info("Waiting for yellow " + indexName + "[" + partition + "]");
+			node.client().admin().cluster().health(new ClusterHealthRequest().waitForYellowStatus().timeout(new TimeValue(75, TimeUnit.MINUTES))).actionGet();
+			
 			String snapshotName = Joiner.on("_").join(SNAPSHOT_NAME_PREFIX, indexName);
 			log.info("Snapshoting " + indexName + "[" + partition + "]" + " as " + snapshotName + " to snapshot repo "
 					+ snapshotRepoName);
-			node.client().admin().cluster().prepareCreateSnapshot(snapshotRepoName, snapshotName)
-					.setWaitForCompletion(true).setIndices(indexName).get();
+			
+			CreateSnapshotResponse createSnapshotResponse = node.client().admin().cluster()
+					.prepareCreateSnapshot(snapshotRepoName, snapshotName)
+					.setWaitForCompletion(true)
+					.setPartial(!moveShards)
+					.setIndices(indexName).get();
+			SnapshotInfo snapshotInfo = createSnapshotResponse.getSnapshotInfo();
+			log.info("Snapshot response " + indexName + "[" + partition + "]: status " + snapshotInfo.status() + ", failed shards:" + snapshotInfo.failedShards() + "(" + snapshotInfo.shardFailures() + ")");
 
 			log.info("Deleting " + indexName + "[" + partition + "]");
 			ActionFuture<DeleteIndexResponse> response = node.client().admin().indices()

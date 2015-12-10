@@ -5,9 +5,11 @@
 ## Is it production ready? - Almost, you should test yourself
 
 ## How it works: 
-It takes spark rdd, and for each partition creates local elasticsearch index within same jvm when number of shards is 1. Then it bulk uploads partition data to this local index and snapshots it. 
-Then it uploads snapshot to destination under where shard data should be located. Then it creates empty index with final number of shards and snapshots it too(done on driver).
-Then it uploads metadata of the last snapshot to destination. Thus data of snapshot is created from rdd and metadata of snapshot is created on driver.
+1. It takes spark rdd, and for each partition creates local elasticsearch index within same worker jvm with number of shards == 1 
+2. Bulk uploads partition data to this local index and snapshots it 
+3. Uploads snapshot to destination under where shard data should be located. 
+4. Creates empty index with final number of shards and snapshots it too(done on driver)
+5. Uploads metadata of the last snapshot to destination. Thus data of snapshot is created from rdd and metadata of snapshot is created on driver
 
 ## How to use
 Check test for full example, in general you configure different parts of pipeline that will create and upload snapshot and use spark context to process it,e.g.

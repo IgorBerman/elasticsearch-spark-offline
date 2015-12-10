@@ -5,7 +5,12 @@
 ## Is it production ready? - Almost, you should test yourself
 
 ## How it works: 
-In general you configure different parts of pipeline that will create and upload snapshot and use spark context to process it
+It takes spark rdd, and for each partition creates local elasticsearch index within same jvm when number of shards is 1. Then it bulk uploads partition data to this local index and snapshots it. 
+Then it uploads snapshot to destination under where shard data should be located. Then it creates empty index with final number of shards and snapshots it too(done on driver).
+Then it uploads metadata of the last snapshot to destination. Thus data of snapshot is created from rdd and metadata of snapshot is created on driver.
+
+## How to use
+Check test for full example, in general you configure different parts of pipeline that will create and upload snapshot and use spark context to process it,e.g.
   ```
   //provide guava supplier that is serializable(it will be passed to workers and should create hadoop configuration with proper credentials and other settings)
   com.google.common.base.Supplier<org.apache.hadoop.conf.Configuration> configurationSupplier = ...;

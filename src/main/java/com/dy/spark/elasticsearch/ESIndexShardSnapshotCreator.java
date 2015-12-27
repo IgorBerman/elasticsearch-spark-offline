@@ -9,7 +9,9 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import lombok.Data;
@@ -19,6 +21,8 @@ import lombok.extern.log4j.Log4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.elasticsearch.action.ActionFuture;
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ListenableActionFuture;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
 import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
@@ -28,11 +32,17 @@ import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.common.base.Function;
 import org.elasticsearch.common.base.Joiner;
+import org.elasticsearch.common.collect.Iterables;
+import org.elasticsearch.common.collect.Lists;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.ImmutableSettings.Builder;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.util.concurrent.Futures;
+import org.elasticsearch.common.util.concurrent.ListenableFuture;
+import org.elasticsearch.common.util.concurrent.SettableFuture;
 import org.elasticsearch.hadoop.cfg.PropertiesSettings;
 import org.elasticsearch.hadoop.serialization.builder.ContentBuilder;
 import org.elasticsearch.hadoop.util.FastByteArrayOutputStream;
@@ -40,6 +50,8 @@ import org.elasticsearch.node.Node;
 import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.snapshots.SnapshotInfo;
 import org.elasticsearch.spark.serialization.ScalaValueWriter;
+
+import org.elasticsearch.*;
 
 import scala.Tuple2;
 
@@ -60,6 +72,20 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 	private final int maxMergedSegment;
 	private final int flushSizeInMb;
 	
+	public final static <T> ListenableFuture<T> esListenableToGuavaListenable(ListenableActionFuture<T>	listenableActionFuture) {
+		final SettableFuture<T> result = SettableFuture.create();
+		listenableActionFuture.addListener(new ActionListener<T>() {
+			@Override
+			public void onResponse(T response) {
+				result.set(response);
+			}
+			@Override
+			public void onFailure(Throwable e) {
+				result.setException(e);
+			}
+		});
+		return result;
+	}
 
 	public <K,V> void create(
 			FileSystem fs, 
@@ -170,7 +196,6 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 					.setSettings(createIndexSettings).get();
 
 			log.info("Starting indexing documents " + indexName + "[" + partition + "]");
-			BulkRequestBuilder bulkRequest = node.client().prepareBulk();
 
 			ScalaValueWriter scalaValueWriter = new ScalaValueWriter();
 			org.elasticsearch.hadoop.cfg.Settings writerSettings = new PropertiesSettings();
@@ -181,6 +206,10 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			
 			int total = 0;
 			int countInBulk = 0;
+			
+			BulkRequestBuilder bulkRequest = node.client().prepareBulk();
+			List<BulkRequestBuilder> bulkList = Lists.newArrayList();
+			
 			while (docs.hasNext()) {
 				Tuple2<K, V> id2doc = docs.next();
 
@@ -190,7 +219,7 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 				K id = id2doc._1();
 				String idAsStr = String.valueOf(id);
 				IndexRequestBuilder indexRequestBuilder = node.client()
-						.prepareIndex(indexName, indexType, idAsStr)
+						.prepareIndex(indexName, indexType)
 						// .setRouting(routing)
 						//.setSource(gson.toJson(doc));
 						.setSource(bos.bytes().bytes(), 0, bos.bytes().length());
@@ -199,7 +228,8 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 				total++;
 
 				if (countInBulk == bulkSize) {
-					submitBulk(bulkRequest, total);
+					bulkList.add(bulkRequest);
+					//submitBulk(bulkRequest, total);
 					countInBulk = 0;
 					bulkRequest = node.client().prepareBulk();
 				}
@@ -208,8 +238,18 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 				}
 			}
 			if (countInBulk != 0) {
-				submitBulk(bulkRequest, total);
+				bulkList.add(bulkRequest);
+				//submitBulk(bulkRequest, total);
 			}
+
+			Futures.successfulAsList(
+					Iterables.transform(bulkList, 
+							new Function<BulkRequestBuilder, ListenableFuture<BulkResponse>>() {
+								@Override
+								public ListenableFuture<BulkResponse> apply(BulkRequestBuilder arg0) {
+									return esListenableToGuavaListenable(arg0.execute());
+								}
+							})).get();
 
 			//TimeValue v = new TimeValue(timeout);
 
@@ -253,6 +293,12 @@ public class ESIndexShardSnapshotCreator implements Serializable {
 			while (!node.isClosed()) {
 				waitForCompletion();
 			}
+		} catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (ExecutionException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		} finally {
 			log.info("Cleanup " + snapshotWorkingLocation);
 			FileUtils.deleteQuietly(new File(snapshotWorkingLocation));
